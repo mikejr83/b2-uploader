@@ -1,0 +1,19 @@
+{
+  "name": "b2_qnap",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "backblaze-b2": "^0.9.11",
+    "glob": "^7.0.5",
+    "lodash": "^4.13.1",
+    "node-7z": "^0.4.0",
+    "q": "^1.4.1",
+    "smb2": "^0.2.7"
+  }
+}

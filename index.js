@@ -41,8 +41,8 @@
     Q.all(promises).then(function () {
         console.log('done');
       },
-      function () {
-        console.log('crap');
+      function (error) {
+        console.log('crap', error);
       });
   });
 

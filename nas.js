@@ -4,13 +4,13 @@
     require('path'),
     require('q'),
     require('lodash'),
-    require('node-7z'),
+    require('archiver'),
     require('smb2'));
 }(this, function (fs,
   path,
   Q,
   _,
-  SevenZip,
+  archiver,
   SMB) {
 
   function getDirectories(srcpath) {
@@ -60,14 +60,35 @@
     },
     handleMonth: function (monthInfo) {
       var deferred = Q.defer(),
-        zip = new SevenZip();
-
-      var monthPath = path.join(this.share, this.rootDirectory, monthInfo.year, monthInfo.month);
+        archive = archiver('zip'),
+		archiveFilename = monthInfo.year + '_' + monthInfo.month + '.zip',
+		monthPath = path.join(this.share, this.rootDirectory, monthInfo.year, monthInfo.month);
+		
       
-      
-      
-      console.log('month', monthPath);
-      deferred.resolve(monthPath);
+	  if(monthInfo.year == "2005" && monthPath.indexOf('.DS_Store') < 0) {
+		  var output = fs.createWriteStream(archiveFilename);
+		
+		  archive.on('end', function() {
+			  console.log('Completed ' + monthInfo.year + ' - ' + monthInfo.month);
+			  deferred.resolve(archiveFilename); 
+		  });
+		  
+		  archive.on('error', function(err){
+			  console.log('Error', monthInfo, err);
+			 deferred.reject(err); 
+		  });
+		  
+		  archive.pipe(output);
+		  
+		  archive.directory(monthPath, path.join(monthInfo.year, monthInfo.month));
+		  
+		  archive.finalize();
+		  
+		  console.log('Zipping:', monthPath);
+	  } else {
+		  console.log('skipping', monthInfo);
+		  deferred.resolve(null);
+	  }
 
       return deferred.promise;
     },
@@ -76,42 +97,39 @@
 
       var yearPath = path.join(this.share, this.rootDirectory, year);
 
-      //      zip.add(year + '.7z', yearPath).then(function() {
-      //        deferred.resolve();
-      //      }).catch(function(err) {
-      //        console.log('ERROR!', err);
-      //        deferred.reject();
-      //      });
+	  if(yearPath.indexOf('.DS_Store') >= 0) {
+		  console.log('Skipping a .DS_Store!');
+		  deferred.resolve();
+	  } else {	  
+		  try {
+			var months = _.map(fs.readdirSync(yearPath), function (month) {
+			  return {
+				month: month,
+				year: year
+			  }
+			})
+			var i = new Iterator(months, this.handleMonth.bind(this)),
+			  month = null;
 
+			var promises = [];
 
+			while (month = i.next()) {
+			  promises.push(month);
+			}
+			
+			return Q.all(promises).then(function (archivePaths) {
+			  console.log('Done processing year:', year);
+			  
+			  return archivePaths;
+			}, function () {
+			  console.log('ooooooooooooooooooooooooooooo');
+			});
 
-      try {
-        var months = _.map(fs.readdirSync(yearPath), function (month) {
-          return {
-            month: month,
-            year: year
-          }
-        })
-        var i = new Iterator(months, this.handleMonth.bind(this)),
-          month = null;
-
-        var promises = [];
-
-        while (month = i.next()) {
-          promises.push(month);
-        }
-        
-        return Q.all(promises).then(function (months) {
-          console.log('months', months);
-        }, function () {
-          console.log('ooooooooooooooooooooooooooooo');
-        });
-
-      } catch (e) {
-        console.log(e);
-        deferred.reject(e);
-      }
-
+		  } catch (e) {
+			console.log(e);
+			deferred.reject(e);
+		  }
+	  }
 
 
 

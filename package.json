@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "archiver": "^1.0.1",
     "backblaze-b2": "^0.9.11",
     "glob": "^7.0.5",
     "lodash": "^4.13.1",

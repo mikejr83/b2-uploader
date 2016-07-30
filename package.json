@@ -1,7 +1,7 @@
 {
-  "name": "b2_qnap",
-  "version": "1.0.0",
-  "description": "",
+  "name": "b2_uploader",
+  "version": "0.0.1",
+  "description": "Point it to a directory and it will upload the files to your b2 account which don't already exist there.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

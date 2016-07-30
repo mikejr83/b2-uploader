@@ -2,12 +2,14 @@
   'use strict';
   module.exports = factory(require('fs'),
     require('path'),
+	require('crypto'),
     require('q'),
     require('lodash'),
     require('archiver'),
     require('smb2'));
 }(this, function (fs,
   path,
+  crypto,
   Q,
   _,
   archiver,
@@ -62,15 +64,31 @@
       var deferred = Q.defer(),
         archive = archiver('zip'),
 		archiveFilename = monthInfo.year + '_' + monthInfo.month + '.zip',
-		monthPath = path.join(this.share, this.rootDirectory, monthInfo.year, monthInfo.month);
-		
+		monthPath = path.join(this.share, this.rootDirectory, monthInfo.year, monthInfo.month),
+		hash = crypto.createHash('sha1');	
+
+		hash.setEncoding('hex');
       
 	  if(monthInfo.year == "2005" && monthPath.indexOf('.DS_Store') < 0) {
 		  var output = fs.createWriteStream(archiveFilename);
 		
 		  archive.on('end', function() {
-			  console.log('Completed ' + monthInfo.year + ' - ' + monthInfo.month);
-			  deferred.resolve(archiveFilename); 
+			  var input = fs.createReadStream(archiveFilename)
+			  
+			  input.on('end', function() {
+			    hash.end();
+				
+				console.log('Completed ' + monthInfo.year + ' - ' + monthInfo.month);
+				
+			    deferred.resolve({
+				  "month": monthInfo.month,
+				  "year": monthInfo.year,
+				  "filename": archiveFilename,
+				  "hash": hash.read()
+				});  
+			  });
+			  
+			  input.pipe(hash);
 		  });
 		  
 		  archive.on('error', function(err){

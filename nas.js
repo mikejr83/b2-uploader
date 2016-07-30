@@ -25,18 +25,47 @@
     this.collection = collection;
     this.handler = handler;
     this.counter = 0;
+	this.executing = 0;
+	this.max = 2;
   }
 
   Iterator.prototype = {
+	wait: function (item) {
+	  var deferred = Q.defer(),
+	    that = this;
+		
+	  _.delay(function () {
+	    if (that.executing < that.max) {
+			that.executing++;
+			deferred.resolve(that.handler(item).then(function(result) {
+			  that.executing--;
+			  return result;
+			}));
+		} else {
+			deferred.resolve(that.wait(item));
+		}
+	  }, 1000, item);
+	  
+	  return deferred.promise;
+	},
+	
     next: function () {
+	  var that = this;
+	  
       if (this.collection.length > this.counter) {
-        var promise = this.handler(this.collection[this.counter]).then(function (result) {
-          console.log('iteration result', result);
-          return result;
-        });
-
+		var promise = null;
+		if (this.executing < this.max) {
+		  this.executing++;
+		  promise = this.handler(this.collection[this.counter]).then(function (result) {
+            that.executing--;
+			return result;
+          });
+		} else {
+		  promise = this.wait(this.collection[this.counter]);
+		}
+		  
         this.counter++;
-
+          
         return promise;
       } else {
         return null;
@@ -62,14 +91,14 @@
     },
     handleMonth: function (monthInfo) {
       var deferred = Q.defer(),
-        archive = archiver('zip'),
-		archiveFilename = monthInfo.year + '_' + monthInfo.month + '.zip',
+        archive = archiver('tar'),
+		archiveFilename = monthInfo.year + '_' + monthInfo.month + '.tar',
 		monthPath = path.join(this.share, this.rootDirectory, monthInfo.year, monthInfo.month),
 		hash = crypto.createHash('sha1');	
 
 		hash.setEncoding('hex');
       
-	  if(monthInfo.year == "2005" && monthPath.indexOf('.DS_Store') < 0) {
+	  if(monthInfo.year == "2007" && monthPath.indexOf('.DS_Store') < 0) {
 		  var output = fs.createWriteStream(archiveFilename);
 		
 		  archive.on('end', function() {

@@ -45,13 +45,14 @@
 		}
 		
 		Q.all(promises).then(function (archiveInfos) {
+			console.log('aaaaaaaaaaaaaaaaaa', archiveInfos);
 		  _.forEach(archiveInfos, function(yearArchiveInfo) {
 			  if(yearArchiveInfo != null && Array.isArray(yearArchiveInfo)){
 				  _.forEach(yearArchiveInfo, function (monthArchiveInfo){
 					  if(monthArchiveInfo != null && fileInfosSha1Hash[monthArchiveInfo.hash]) {
 						  console.log('Month is already archived and does not need to be updated.', monthArchiveInfo.filename);
 					  } else if(monthArchiveInfo != null){
-						  blaze.uploadFile(result.bucketId, monthArchiveInfo.filename).then(function(uploadResponse) {
+						  blaze.uploadFile(result.bucketId, monthArchiveInfo.filename, monthArchiveInfo.year).then(function(uploadResponse) {
 							 console.log('uploadResponse', uploadResponse); 
 						  }, function (err) {
 							  console.log('errr!', err);

@@ -52,7 +52,7 @@
     logger.cli.info('Now I\'m going to get the information about your local files. I\'ll then batch up the uploads for the missing files!');
     nasWorker.getFileInfo().then(function (promises) {
       logger.file.debug('Working with ' + promises.length + ' promises');
-      
+
       var que = new Queue(10, Infinity);
 
       _.forEach(promises, function (promise) {
@@ -60,31 +60,39 @@
           logger.file.debug('Got the file info to check.', fileInfo);
 
           if (!fileInfosSha1Hash[fileInfo.hash]) {
-            var remoteFilename = path.relative(path.join(config.share, config.rootDirectory), fileInfo.filename).replace(/\s/, '_').split(path.sep).join('/');
+            var remoteFilename = path.relative(path.join(config.share, config.rootDirectory), fileInfo.filename)
+              .replace(/\s/, '_')
+              .split(path.sep)
+              .join('/');
 
+            logger.cli.info('Queuing upload for ' + fileInfo.filename);
             logger.file.debug('Queuing upload for ' + fileInfo.filename);
-            
-            var uploadPromise = Q.Promise(function (resolve, reject, notify) {
+
+            que.add(function () {
+              logger.file.debug('Starting upload for ' + fileInfo.filename);
               return blaze.uploadFile(result.bucketId, fileInfo.filename, remoteFilename).then(function (uploadResponse) {
                 return uploadResponse;
               });
+            }).then(function (dealie) {
+              logger.file.debug('Upload promised resolved.', dealie);
+            }, function (err) {
+              logger.cli.error('An error on upload!');
+              logger.file.error('An error on upload. This comes from the que.add call.', err);
             });
-
-            que.add(uploadPromise);
           } else {
             logger.cli.info('Backblaze already has this file:', fileInfo.filename);
           }
         });
       });
-      
+
       var queueCheck = function () {
         var queueLength = que.getPendingLength();
         console.log('Queue pending length: ' + queueLength);
-        if(queueLength > 0) {
+        if (queueLength > 0) {
           _.delay(queueCheck, 5000);
         }
       };
-      
+
       _.delay(queueCheck, 5000);
     });
   }, function (error) {

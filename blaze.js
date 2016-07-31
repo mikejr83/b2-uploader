@@ -44,19 +44,56 @@
       });
     },
 
-    _getFileList: function (startFilename) {
+    _getFileList: function (bucketId, lastFileInfo) {
+      var that = this;
 
+      return this.b2.listFileNames({
+        bucketId: bucketId,
+        maxFileCount: 100,
+        startFileName: lastFileInfo.fileName
+      }).then(function (filesResponse) {
+        if(filesResponse.code && filesResponse.code === 'bad_json') {
+          throw 'Bad JSON';
+        }
+
+        filesResponse.bucketId = bucketId;
+
+        if (filesResponse.files.length == 100) {
+          logger.cli.info('You have a lot of files! Let me look for more!');
+          return that._getFileList(bucketId, _.last(filesResponse.files)).then(function (aggregateResponse) {
+            filesResponse.files = _.concat(filesResponse.files, aggregateResponse.files);
+
+            return filesResponse;
+          });
+        } else {
+          return filesResponse;
+        }
+      });
     },
 
     getAllFileInfo: function () {
       var that = this;
+
+      logger.file.debug('Getting file info from b2.');
+
       return this.findBucket().then(function (targetBucket) {
         return that.b2.listFileNames({
           bucketId: targetBucket.bucketId,
           maxFileCount: 100
         }).then(function (filesResponse) {
           filesResponse.bucketId = targetBucket.bucketId;
-          return filesResponse;
+
+          if (filesResponse.files.length == 100) {
+            logger.cli.info('You have a lot of files! Let me look for more!');
+
+            return that._getFileList(targetBucket.bucketId, _.last(filesResponse.files)).then(function (aggregateResponse) {
+              filesResponse.files = _.concat(filesResponse.files, aggregateResponse.files);
+
+              return filesResponse;
+            });
+          } else {
+            return filesResponse;
+          }
         });
       });
     },

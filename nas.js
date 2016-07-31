@@ -53,7 +53,7 @@
 
         var promises = [];
 
-        var que = new Queue(10, 100);
+        var que = new Queue(10, Infinity);
 
         _.forEach(files, function (file) {
           if (file.indexOf('Thumbs.db') >= 0 ||

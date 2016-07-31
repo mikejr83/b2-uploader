@@ -52,7 +52,7 @@
         maxFileCount: 100,
         startFileName: lastFileInfo.fileName
       }).then(function (filesResponse) {
-        if(filesResponse.code && filesResponse.code === 'bad_json') {
+        if (filesResponse.code && filesResponse.code === 'bad_json') {
           throw 'Bad JSON';
         }
 
@@ -118,7 +118,15 @@
         }
 
 
-        return that.b2.uploadFile(uploadInfo);
+        return that.b2.uploadFile(uploadInfo).then(function (uploadResponse) {
+          if (uploadResponse.code == 503) {
+            return that.uploadFile(bucketId, filename, remoteFilename);
+          } else {
+            return uploadResponse;
+          }
+        }, function (uploadError) {
+          logger.cli.warn('Upload error', uploadError);
+        });
       }, function (err) {
         logger.file.error('Unable to get upload url.', err);
       });

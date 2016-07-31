@@ -72,6 +72,8 @@
               logger.file.debug('Starting upload for ' + fileInfo.filename);
               return blaze.uploadFile(result.bucketId, fileInfo.filename, remoteFilename).then(function (uploadResponse) {
                 return uploadResponse;
+              }, function (ugh) {
+                console.log('ugh something happened', ugh);
               });
             }).then(function (dealie) {
               logger.file.debug('Upload promised resolved.', dealie);
@@ -86,11 +88,9 @@
       });
 
       var queueCheck = function () {
-        var queueLength = que.getPendingLength();
+        var queueLength = que.getQueueLength();
         console.log('Queue pending length: ' + queueLength);
-        if (queueLength > 0) {
           _.delay(queueCheck, 5000);
-        }
       };
 
       _.delay(queueCheck, 5000);

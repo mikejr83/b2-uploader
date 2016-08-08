@@ -122,7 +122,10 @@
           if (uploadResponse.code == 503) {
             return that.uploadFile(bucketId, filename, remoteFilename);
           } else {
-            return uploadResponse;
+            return {
+              response: uploadResponse,
+              filename: filename
+            };
           }
         }, function (uploadError) {
           logger.cli.warn('Upload error', uploadError);

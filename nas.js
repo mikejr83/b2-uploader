@@ -19,18 +19,55 @@
   _,
   logger) {
 
-  function NAS(share, rootDirectory, domain, username, password) {
-    this.share = share;
+  function NAS(dbProvider, rootDirectory, domain, username, password) {
+    this.dbProvider = dbProvider;
     this.rootDirectory = rootDirectory;
     this.domain = domain;
     this.username = username;
     this.password = password;
+    this.que = new Queue(10, Infinity);
   }
 
+  NAS.generateFileHash = function (file) {
+    return Q.Promise(function (resolve, reject, notify) {
+      var input = fs.createReadStream(file),
+        hash = crypto.createHash('sha1');
+
+      logger.file.debug('Hasing:', file);
+
+      hash.setEncoding('hex');
+
+      input.on('end', function () {
+        hash.end();
+
+        var fileInfo = {
+          filename: file,
+          hash: hash.read()
+        };
+
+        logger.file.debug('Got hash for ' + file, fileInfo.hash);
+
+        resolve(fileInfo);
+      });
+
+      input.on('error', function (err) {
+        logger.file.error('Error hashing file: ' + file, err);
+
+        reject(err);
+      });
+
+      input.pipe(hash);
+    });
+  };
+
   NAS.prototype = {
+    _hashesCache: {
+
+    },
+
     getFileList: function () {
       var deferred = Q.defer(),
-        searchPath = path.join(this.share, this.rootDirectory, '**/*');
+        searchPath = path.join(this.rootDirectory, '**/*');
 
       logger.cli.info('Looking for all the files to upload:', searchPath);
       logger.file.info('Search path:', searchPath);
@@ -43,7 +80,23 @@
       return deferred.promise;
     },
 
-    getFileInfo: function () {
+    getInfoForFiles: function (files) {
+      var that = this,
+          promises = [];
+
+      _.forEach(files, function (file) {
+        if (file.indexOf('Thumbs.db') >= 0 ||
+          file.indexOf('Picasa.ini') >= 0) return;
+
+        promises.push(that.que.add(function () {
+          return NAS.generateFileHash(file);
+        }));
+      });
+
+      return promises;
+    },
+
+    getFileInfo: function (b2FilesHash) {
       var that = this;
       return this.getFileList().then(function (files) {
         logger.cli.info('Got your files to process...');
@@ -59,35 +112,29 @@
           if (file.indexOf('Thumbs.db') >= 0 ||
             file.indexOf('Picasa.ini') >= 0) return;
 
+          if (b2FilesHash[file]) {
+            logger.cli.info('We already uploaded this file! ' + file);
+          }
+
           promises.push(que.add(function () {
             return Q.Promise(function (resolve, reject, notify) {
-              var input = fs.createReadStream(file),
-                hash = crypto.createHash('sha1');
-
-              logger.file.debug('Hasing:', file);
-
-              hash.setEncoding('hex');
-
-              input.on('end', function () {
-                hash.end();
-
-                var fileInfo = {
-                  filename: file,
-                  hash: hash.read()
-                };
-
-                logger.file.debug('Got hash for ' + file, fileInfo.hash);
-
-                resolve(fileInfo);
+              that.dbProvider.findFileInfoByFilename(file).then(function (cacheFileInfo) {
+                if (cacheFileInfo && cacheFileInfo.length > 0) {
+                  resolve(cacheFileInfo[0]);
+                } else {
+                  NAS.generateFileHash(file);
+                }
+              }, function (oops) {
+                console.error('oops', oops);
+              }).then(function (fileInfo) {
+                that.dbProvider.updateFileInfo(fileInfo.filename, fileInfo.hash).then(function (savedFileInfo) {
+                  resolve(savedFileInfo);
+                });
+              }, function (hashingErr) {
+                if (hashingErr.code !== 'EISDIR') {
+                  console.error(hashingErr);
+                }
               });
-
-              input.on('error', function (err) {
-                logger.file.error('Error hashing file: ' + file, err);
-
-                reject(err);
-              });
-
-              input.pipe(hash);
             });
           }));
         });

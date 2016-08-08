@@ -6,6 +6,10 @@
 }(function (fs,
   winston) {
 
+  try {
+    fs.unlinkSync('app.log');
+  } catch (ex) { }
+
   var cliLogger = new winston.Logger({
     transports: [
       new(winston.transports.Console)()
@@ -14,7 +18,10 @@
 
   cliLogger.cli();
 
-  var filelogger = new winston.Logger({
+  var filelogger = null;
+
+
+  filelogger = new winston.Logger({
     transports: [
       new(winston.transports.File)({
         filename: 'app.log',

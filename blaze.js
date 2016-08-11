@@ -113,19 +113,24 @@
         try {
           uploadInfo.data = fs.readFileSync(filename);
         } catch (e) {
-          logger.file.error('File read error!', e);
+          logger.file.error('File read error! File: ' + filename, e);
           return e;
         }
 
-
         return that.b2.uploadFile(uploadInfo).then(function (uploadResponse) {
           if (uploadResponse.code == 503) {
+            logger.cli.warn('b2 returned 503. Trying again!');
+
             return that.uploadFile(bucketId, filename, remoteFilename);
           } else {
-            return {
+            var responseWithFilename = {
               response: uploadResponse,
               filename: filename
             };
+
+            console.log('RESPONSE', responseWithFilename);
+
+            return responseWithFilename;
           }
         }, function (uploadError) {
           logger.cli.warn('Upload error', uploadError);

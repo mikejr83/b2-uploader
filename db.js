@@ -43,9 +43,14 @@
     updateFileInfo: function (filename, hash) {
       var that = this;
 
-      if (typeof (filename) === 'object') {
-        hash = filename.hash;
-        filename = filename.filename;
+      try {
+        if (filename && typeof (filename) === 'object') {
+          hash = filename.hash;
+          filename = filename.filename;
+        }
+      } catch (e) {
+        logger.file.error('Error parsing update file info arguements.', arguments);
+        console.log('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
       }
 
       logger.file.debug('Updating file info', {
@@ -57,16 +62,17 @@
         if (!fileInfo || fileInfo.length) {
           // need to update
           return Q.Promise(function (resolve, reject) {
-            that.db.update({
-              hash: hash
-            }, {
+            that.db.update({ hash: hash}, {
               hash: hash,
               filename: filename
-            }, function (err, updated) {
+            }, function (err, numUpdated, updated) {
               if (err) {
+                logger.cli.error('Error when updating!', fileInfo);
+                logger.file.error('Error when updating!', err, fileInfo);
+
                 reject(err);
               } else {
-                resolve(updated);
+                resolve(fileInfo);
               }
             });
           });

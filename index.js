@@ -13,8 +13,9 @@
     require('lodash'),
     require('q'),
     require('promise-queue'),
+    require('mkdirp'),
     require('moment'));
-}(this, function (fs,
+} (this, function (fs,
   path,
   winston,
   NAS,
@@ -24,6 +25,7 @@
   _,
   Q,
   Queue,
+  mkdirp,
   moment) {
   'use strict';
 
@@ -51,7 +53,8 @@
 
   var nasWorker = new NAS(dbProvider, config.rootDirectory, config.domain, config.username, config.password),
     blaze = new Blaze(config.accountId, config.applicationKey, config.bucketName),
-    normalizedPath = config.rootDirectory.replace(/\\/gi, '/');
+    normalizedPath = config.rootDirectory.replace(/\\/gi, '/'),
+    uploadPromises = [];
 
   blaze.getAllFileInfo()
     .then(function (result) {
@@ -119,19 +122,101 @@
         });
       }
 
+      function createRemoteFilename(fileInfo) {
+        return path.relative(config.rootDirectory, fileInfo.filename).replace(/\\/gi, '/').replace(/\s/gi, '_');
+      }
+
       function uploadFile(fileInfo) {
-        return que.add(function () {
-          var remotePath = null;
+        if (!fileInfo) {
+          logger.file.debug('File Info wasn\'t provided for uploadFile.');
+          return;
+        }
+
+        var uploadPromise = que.add(function () {
+          return Q.Promise(function (resolve, reject, notify) {
+            var remotePath = null;//,
+            //  local = null;
+            //try {
+            //  local = path.join('./temp', createRemoteFilename(fileInfo));
+            //} catch (e) {
+            //  logger.file.warn('Had a problem creating a remote filename.', fileInfo, e);
+            //  reject(e);
+            //}
+
+            //logger.cli.info('Uploading ' + local);
+
+            try {
+              remotePath = createRemoteFilename(fileInfo);
+            } catch (e) {
+              reject(e);
+            }
+
+            return blaze.uploadFile(result.bucketId,
+              fileInfo.filename,
+              remotePath);
+          });
+        });
+
+        uploadPromises.push(uploadPromise);
+
+        return uploadPromise;
+      }
+
+      function cacheFileLocally(fileInfo) {
+        return Q.Promise(function (resolve, reject, notify) {
+          var local = null;
 
           try {
-            remotePath = path.relative(config.rootDirectory, fileInfo.filename).replace(/\\/gi, '/').replace(/\s/gi, '_');
+            local = path.join('./temp', createRemoteFilename(fileInfo));
           } catch (e) {
-            return;
+            logger.file.warn('Had a problem creating a remote filename.', fileInfo, e);
+            reject(e);
           }
 
-          return blaze.uploadFile(result.bucketId,
-            fileInfo.filename,
-            remotePath);
+          if (local) {
+            mkdirp(path.dirname(local), function (error) {
+              if (error) {
+                reject(error);
+              } else {
+                var readStream = fs.createReadStream(fileInfo.filename);
+
+                readStream.on('end', function () {
+                  resolve(fileInfo);
+                });
+
+                readStream.on('error', function (err) {
+                  reject(err);
+                });
+
+                readStream.pipe(fs.createWriteStream(local));
+              }
+            });
+          }
+        });
+      }
+
+      function removeCachedLocalFile(uploadResponse) {
+        return Q.Promise(function (resolve, reject, notify) {
+          if (uploadResponse && uploadResponse.filename) {
+            var local = null;
+
+            try {
+              local = path.join('./temp', createRemoteFilename(uploadResponse.filename));
+            } catch (e) {
+              logger.file.warn('Had a problem creating a remote filename.', uploadResponse, e);
+              reject(e);
+            }
+
+            if (local) {
+              fs.unlink(local, function (err) {
+                if (err) {
+                  reject(err);
+                } else {
+                  resolve(uploadResponse);
+                }
+              });
+            }
+          }
         });
       }
 
@@ -144,16 +229,38 @@
           _.forEach(hashPromises, function (promise) {
             var uploadPromise = promise
               .then(function (fileInfo) {
-                return dbProvider.updateFileInfo(fileInfo);
+                if (fileInfo) {
+                  return dbProvider.updateFileInfo(fileInfo);
+                } else {
+                  console.log('the promise returned nothing for the file info hash.');
+                }
+              }, function (err) {
+                logger.file.error('Problem with file hash.', err);
               })
-              .then(uploadFile)
+              //.then(cacheFileLocally, function (err) {
+              //  logger.file.error('Problem during updating file info in cache db.', err);
+              //})
+              .then(uploadFile, function (err) {
+                logger.file.error('Problem while caching file locally before upload.', err);
+              })
+              //.then(removeCachedLocalFile, function (err) {
+              //  logger.file.error('Problem uploading file.', err);
+              //})
               .then(function (uploadResult) {
-                // Upload Completed!
                 logger.file.debug('Upload completed!', uploadResult);
 
                 if (uploadResult && uploadResult.filename) {
-                  logger.cli.info('Upload completed for ' + uploadResult.filename + ' (' + uploadResult.response + ')');
+                  logger.cli.info('Upload completed for ' + uploadResult.filename + ' (' + uploadResult.response.contentSha1 + ')');
                 }
+              }, function (error) {
+                if (error && error.code !== 'EISDIR') {
+                  console.error('CRAP an error', error);
+                }
+              })
+              .catch(function (error) {
+                // Handle any error from all above steps
+                logger.cli.error('An error occurred! Check the logs.');
+                logger.file.error('Trapping an error in a promise.', error);
               });
 
             promises.push(uploadPromise);
@@ -167,7 +274,8 @@
           logger.cli.info('Completed the upload process! Yea!');
           logger.file.info('All the promises are resolved.', result);
         });
-    }, function (error) {
+    },
+    function (error) {
       logger.file.error('Oh stool!', error);
     });
 }));

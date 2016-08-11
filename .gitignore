@@ -6,3 +6,7 @@
 config.json
 /app.log
 /test.db.json
+/typings
+/obj/Debug
+/bin
+/.vs/b2-updater/v14

@@ -30,44 +30,49 @@
 
   NAS.generateFileHash = function (file) {
     return Q.Promise(function (resolve, reject, notify) {
-      fs.lstat(file, function (err, stats) {
-        if (!err && stats && stats.isFile()) {
-          var input = fs.createReadStream(file),
-            hash = crypto.createHash('sha1');
+      try {
+        fs.lstat(file, function (err, stats) {
+          if (!err && stats && stats.isFile()) {
+            var input = fs.createReadStream(file),
+              hash = crypto.createHash('sha1');
 
-          logger.file.debug('Hasing:', file);
+            logger.file.debug('Hasing:', file);
 
-          hash.setEncoding('hex');
+            hash.setEncoding('hex');
 
-          input.on('end', function () {
-            hash.end();
+            input.on('end', function () {
+              hash.end();
 
-            var fileInfo = {
-              filename: file,
-              hash: hash.read()
-            };
+              var fileInfo = {
+                filename: file,
+                hash: hash.read()
+              };
 
-            logger.file.debug('Got hash for ' + file, fileInfo.hash);
+              logger.file.debug('Got hash for ' + file, fileInfo.hash);
 
-            resolve(fileInfo);
-          });
+              resolve(fileInfo);
+            });
 
-          input.on('error', function (err) {
-            logger.cli.error('Error ocurred hashing ' + file);
-            logger.file.error('Error hashing file: ' + file, err);
+            input.on('error', function (err) {
+              logger.cli.error('Error ocurred hashing ' + file);
+              logger.file.error('Error hashing file: ' + file, err);
 
+              reject(err);
+            });
+
+            input.pipe(hash);
+          } else if (err) {
+            logger.file.warning('Having an issue hashing the file:', err, file);
             reject(err);
-          });
-
-          input.pipe(hash);
-        } else if (err) {
-          logger.file.warning('Having an issue hashing the file:', err, file);
-          reject(err);
-        } else {
-          logger.file.debug('The stat is for something that is not a file.', file);
-          reject();
-        }
-      });
+          } else {
+            logger.file.debug('The stat is for something that is not a file.', file);
+            reject();
+          }
+        });
+      } catch (e) {
+        logger.cli.error('lstat failed.', e);
+        reject(e);
+      }
     });
   };
 
@@ -77,18 +82,24 @@
     },
 
     getFileList: function () {
-      var deferred = Q.defer(),
-        searchPath = path.join(this.rootDirectory, '**/*');
+      var that = this;
 
-      logger.cli.info('Looking for all the files to upload:', searchPath);
-      logger.file.info('Search path:', searchPath);
+      return Q.promise(function (resolve, reject, notify) {
+        var searchPath = path.join(that.rootDirectory, '**/*');
 
-      glob(searchPath, function (err, files) {
-        logger.file.debug('Glob finished:', files);
-        deferred.resolve(files);
+        logger.cli.info('Looking for all the files to upload:', searchPath);
+        logger.file.info('Search path:', searchPath);
+
+        glob(searchPath, function (err, files) {
+          if (err) {
+            logger.cli.error('Ooops. Can\'t get the file list.', err);
+            reject(err);
+          } else {
+            logger.file.debug('Glob finished:', files);
+            resolve(files);
+          }
+        });
       });
-
-      return deferred.promise;
     },
 
     getInfoForFiles: function (files) {
@@ -99,9 +110,11 @@
         if (file.indexOf('Thumbs.db') >= 0 ||
           file.indexOf('Picasa.ini') >= 0) return;
 
-        promises.push(that.que.add(function () {
+        var infoPromise = that.que.add(function () {
           return NAS.generateFileHash(file);
-        }));
+        });
+
+        promises.push(infoPromise);
       });
 
       return promises;

@@ -112,13 +112,18 @@
         });
 
         return Q.allSettled(promises).then(function (results) {
-          return _.chain(results)
+
+          var items = _.chain(results)
             .filter({
               state: 'fulfilled'
             })
             .map('value')
             .compact()
             .value();
+
+          logger.cli.info('Finished up checking files. ' + items.length);
+
+          return items;
         });
       }
 
@@ -127,39 +132,27 @@
       }
 
       function uploadFile(fileInfo) {
-        if (!fileInfo) {
+        if (!fileInfo || !fileInfo.filename) {
           logger.file.debug('File Info wasn\'t provided for uploadFile.');
-          return;
-        }
+          return Q.when(null);
+        } else {
+          var uploadPromise = que.add(function () {
+            //return Q.Promise(function (resolve, reject, notify) {
 
-        var uploadPromise = que.add(function () {
-          return Q.Promise(function (resolve, reject, notify) {
-            var remotePath = null;//,
-            //  local = null;
-            //try {
-            //  local = path.join('./temp', createRemoteFilename(fileInfo));
-            //} catch (e) {
-            //  logger.file.warn('Had a problem creating a remote filename.', fileInfo, e);
-            //  reject(e);
-            //}
 
-            //logger.cli.info('Uploading ' + local);
-
-            try {
-              remotePath = createRemoteFilename(fileInfo);
-            } catch (e) {
-              reject(e);
-            }
+            var remotePath = createRemoteFilename(fileInfo);
 
             return blaze.uploadFile(result.bucketId,
               fileInfo.filename,
-              remotePath);
+              remotePath,
+              fileInfo.hash);
+            //});
           });
-        });
 
-        uploadPromises.push(uploadPromise);
+          uploadPromises.push(uploadPromise);
 
-        return uploadPromise;
+          return uploadPromise;
+        }
       }
 
       function cacheFileLocally(fileInfo) {
@@ -277,5 +270,8 @@
     },
     function (error) {
       logger.file.error('Oh stool!', error);
+    })
+    .catch(function (err) {
+      console.log('errrrrrr', err);
     });
 }));

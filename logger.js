@@ -9,6 +9,12 @@
   var cannotRemovePreviousLog = false,
     logFilename = 'app.log';
 
+  try {
+    fs.statSync(logFilename);
+  } catch (e) {
+    cannotRemovePreviousLog = true;
+  }
+
   if (fs.existsSync(logFilename)) {
     try {
       fs.unlinkSync(logFilename);
@@ -28,25 +34,31 @@
   var filelogger = null;
 
 
-  try {
-    filelogger = new winston.Logger({
-      transports: [
-        new (winston.transports.File)({
-          filename: logFilename,
-          level: 'silly',
-          prettyPrint: true,
-          stringify: function (obj) {
-            return JSON.stringify(obj, null, 2);
-          }
-        })
-      ]
-    });
-  } catch (e) {
 
-  }
 
-  if (!filelogger || cannotRemovePreviousLog) {
+  if (cannotRemovePreviousLog) {
     filelogger = new winston.Logger();
+  } else {
+    try {
+      filelogger = new winston.Logger({
+        transports: [
+          new (winston.transports.File)({
+            filename: logFilename,
+            level: 'silly',
+            prettyPrint: true,
+            stringify: function (obj) {
+              return JSON.stringify(obj, null, 2);
+            }
+          })
+        ]
+      });
+    } catch (e) {
+
+    }
+
+    if (!filelogger) {
+      filelogger = new winston.Logger();
+    }
   }
 
   return {

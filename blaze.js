@@ -6,9 +6,9 @@
     require('q'),
     require('lodash'),
     require('./logger.js'));
-}(function (fs,
+} (function (fs,
   B2,
-  q,
+  Q,
   _,
   logger) {
 
@@ -101,23 +101,36 @@
     uploadFile: function (bucketId, filename, remoteFilename) {
       var that = this;
 
-      return this.b2.getUploadUrl(bucketId).then(function (uploadUrlResponse) {
-        var uploadInfo = {
-          uploadUrl: uploadUrlResponse.uploadUrl,
-          uploadAuthToken: uploadUrlResponse.authorizationToken,
-          filename: remoteFilename
-        };
+      function createUploadInfo(uploadUrlResponse) {
+        return Q.promise(function (resolve, reject, notify) {
+          var uploadInfo = {
+            uploadUrl: uploadUrlResponse.uploadUrl,
+            uploadAuthToken: uploadUrlResponse.authorizationToken,
+            filename: remoteFilename
+          };
 
-        logger.file.debug('Uploading', uploadInfo);
+          logger.file.debug('Uploading', uploadInfo);
 
-        try {
-          uploadInfo.data = fs.readFileSync(filename);
-        } catch (e) {
-          logger.file.error('File read error! File: ' + filename, e);
-          return e;
-        }
+          try {
+            uploadInfo.data = fs.readFile(filename, function (err, data) {
+              if (err) {
+                reject(err);
+              } else {
+                uploadInfo.data = data;
+                resolve(uploadInfo);
+              }
+            });
+          } catch (e) {
+            logger.file.error('File read error! File: ' + filename, e);
+            reject(e);
+          }
+        });
+      }
 
-        return that.b2.uploadFile(uploadInfo).then(function (uploadResponse) {
+      return this.b2.getUploadUrl(bucketId)
+        .then(createUploadInfo)
+        .then(this.b2.uploadFile.bind(this.b2))
+        .then(function (uploadResponse) {
           if (uploadResponse.code == 503) {
             logger.cli.warn('b2 returned 503. Trying again!');
 
@@ -132,12 +145,31 @@
 
             return responseWithFilename;
           }
-        }, function (uploadError) {
-          logger.cli.warn('Upload error', uploadError);
         });
-      }, function (err) {
-        logger.file.error('Unable to get upload url.', err);
-      });
+      //.then(function (uploadInfo) {
+
+
+      //  return that.b2.uploadFile(uploadInfo).then(function (uploadResponse) {
+      //    if (uploadResponse.code == 503) {
+      //      logger.cli.warn('b2 returned 503. Trying again!');
+
+      //      return that.uploadFile(bucketId, filename, remoteFilename);
+      //    } else {
+      //      var responseWithFilename = {
+      //        response: uploadResponse,
+      //        filename: filename
+      //      };
+
+      //      console.log('RESPONSE', responseWithFilename);
+
+      //      return responseWithFilename;
+      //    }
+      //  }, function (uploadError) {
+      //    logger.cli.warn('Upload error', uploadError);
+      //  });
+      //}, function (err) {
+      //  logger.file.error('Unable to get upload url.', err);
+      //});
     }
   };
 
